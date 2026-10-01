@@ -1,8 +1,6 @@
-// Configuración opcional de la nube (Supabase).
-// Si lo dejás vacío, Truquito guarda todo en el navegador (localStorage).
-// Para compartir historial entre varios celulares, seguí los pasos del README
-// y pegá acá la URL y la "anon public key" de tu proyecto de Supabase.
+// Configuración de la nube (Supabase) para compartir el historial entre celulares.
+// La clave "publishable" está hecha para ir en la web: se puede compartir sin problema.
 window.TRUQUITO_CONFIG = {
-  supabaseUrl: "",      // ej: "https://abcdefgh.supabase.co"
-  supabaseAnonKey: "",  // ej: "eyJhbGciOi..."
+  supabaseUrl: "https://uusdtfvmmtzdwocvhftd.supabase.co",
+  supabaseAnonKey: "sb_publishable_hmZ56nGaYuYbVGlHyqk5dA_fEkgG-aC",
 };

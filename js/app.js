@@ -81,6 +81,12 @@ const routes = [
 let currentView = null;
 function route({ scroll = true } = {}) {
   const hash = location.hash || "#/";
+  document.body.classList.toggle("no-group", !S.getGroup());
+  if (!S.getGroup() && hash !== "#/ajustes") {
+    currentView = renderWelcome; renderWelcome();
+    document.querySelectorAll(".bottomnav a").forEach((a) => a.classList.remove("active"));
+    return;
+  }
   for (const [re, fn, nav] of routes) {
     const m = hash.match(re);
     if (m) {
@@ -96,6 +102,63 @@ function route({ scroll = true } = {}) {
 }
 const rerender = () => currentView?.();
 window.addEventListener("hashchange", () => { closeSheet(); justWon = null; route(); });
+
+/* ================= Grupos ================= */
+function renderWelcome() {
+  $app.innerHTML = `<div class="stack">
+    <section class="hero">
+      <div class="suits" aria-hidden="true">♣♥</div>
+      <h1>Bienvenido a Truquito</h1>
+      <p>Primero armá el grupo de tu barra. Todos los que estén en el grupo ven los mismos jugadores, partidas y ranking, desde cualquier celular o compu.</p>
+    </section>
+    <form class="card stack" data-form="create-group">
+      <h2>Crear un grupo nuevo</h2>
+      <label class="field">Nombre del grupo <input type="text" name="name" placeholder="ej: Barra del jueves" maxlength="40" autocomplete="off" required></label>
+      <button class="btn felt block" type="submit">Crear grupo</button>
+    </form>
+    <form class="card stack" data-form="join-group">
+      <h2>Ya tengo un grupo</h2>
+      <div class="small muted">Pegá el link de invitación o el código que te pasaron.</div>
+      <input type="text" name="code" placeholder="ej: barra-del-jueves-x7k2" autocomplete="off" autocapitalize="off" aria-label="Código o link del grupo" required>
+      <button class="btn block" type="submit">Unirme</button>
+    </form>
+  </div>`;
+}
+
+function groupSheet() {
+  const list = S.groups();
+  const cur = S.getGroup();
+  openSheet(`<h2>Mis grupos</h2>
+    <div class="stack" style="margin-top:12px;gap:8px">
+      ${list.map((g) => `<button type="button" class="opt" data-action="switch-group" data-code="${h(g.code)}" style="${g.code === cur ? "border-color:var(--accent)" : ""}">
+        <span>${h(g.name)}<br><small class="muted" style="font-weight:500">${h(g.code)}</small></span><b>${g.code === cur ? "✓" : ""}</b></button>`).join("")}
+    </div>
+    ${cur ? `<button type="button" class="btn primary block" data-action="invite" style="margin-top:12px">Invitar a “${h(S.groupName())}”</button>` : ""}
+    <div class="row" style="margin-top:8px">
+      <button type="button" class="btn grow" data-action="new-group">+ Crear grupo</button>
+      <button type="button" class="btn grow" data-action="join-group">Unirme a otro</button>
+    </div>`);
+}
+
+async function invite() {
+  const link = S.inviteLink();
+  const text = `Sumate a "${S.groupName()}" en Truquito para anotar el truco: ${link}`;
+  try {
+    if (navigator.share) await navigator.share({ title: "Truquito", text, url: link });
+    else { await navigator.clipboard.writeText(link); toast("Link copiado"); }
+  } catch {}
+}
+
+async function doJoin(value) {
+  try {
+    toast("Buscando grupo…");
+    const name = await S.joinGroup(value);
+    closeSheet();
+    location.hash = "#/";
+    route();
+    toast(`Estás en “${name}”`);
+  } catch (e) { toast(e.message || "No se pudo unir"); }
+}
 
 /* ================= Inicio ================= */
 function matchRow(m, highlightPid) {
@@ -619,26 +682,23 @@ function renderRanking() {
 /* ================= Ajustes ================= */
 function renderSettings() {
   const theme = safeTheme();
-  const group = S.getGroup();
-  const link = group ? `${location.origin}${location.pathname}?grupo=${encodeURIComponent(group)}` : "";
   $app.innerHTML = `<div class="stack">
     <h1>Ajustes</h1>
 
-    <div class="card stack">
-      <h2>Grupo en la nube</h2>
-      ${S.cloudConfigured() ? `
-        <p class="small muted" style="margin:0">Todos los que entren con el mismo código de grupo comparten jugadores, historial y ranking.</p>
-        <form class="row" data-form="group">
-          <input type="text" name="code" placeholder="ej: barra-del-jueves" value="${h(group)}" autocomplete="off" aria-label="Código de grupo">
-          <button class="btn primary" type="submit">${group ? "Cambiar" : "Unirme"}</button>
-        </form>
-        ${group ? `<div class="row wrap">
-          <button type="button" class="btn sm" data-action="copy-link" data-link="${h(link)}">Copiar link de invitación</button>
-          <button type="button" class="btn sm" data-action="sync-now">Sincronizar ahora</button>
-          <button type="button" class="btn sm danger" data-action="leave-group">Salir del grupo</button>
-        </div>` : ""}
-      ` : `<p class="small muted" style="margin:0">Ahora todo se guarda en este dispositivo. Para compartir el historial entre varios celulares, conectá Supabase (gratis): está explicado paso a paso en el <code>README.md</code> del proyecto.</p>`}
-    </div>
+    ${S.getGroup() ? `<div class="card stack">
+      <h2>Grupo</h2>
+      <form class="row" data-form="rename-group">
+        <input type="text" name="name" value="${h(S.groupName())}" maxlength="40" aria-label="Nombre del grupo">
+        <button class="btn sm" type="submit">Guardar</button>
+      </form>
+      <div class="small muted">Código: <code>${h(S.getGroup())}</code>${S.cloudConfigured() ? " · se comparte en la nube" : " · solo en este dispositivo"}</div>
+      <div class="row wrap">
+        <button type="button" class="btn sm primary" data-action="invite">Invitar</button>
+        <button type="button" class="btn sm" data-action="groups">Cambiar de grupo</button>
+        <button type="button" class="btn sm" data-action="sync-now">Sincronizar</button>
+        <button type="button" class="btn sm danger" data-action="leave-group">Salir del grupo</button>
+      </div>
+    </div>` : ""}
 
     <div class="card stack">
       <h2>Apariencia</h2>
@@ -719,7 +779,22 @@ document.addEventListener("click", (ev) => {
     case "theme": applyTheme(el.dataset.v); renderSettings(); break;
     case "copy-link": navigator.clipboard?.writeText(el.dataset.link).then(() => toast("Link copiado")).catch(() => toast(el.dataset.link)); break;
     case "sync-now": S.sync(); break;
-    case "leave-group": S.setGroup(""); S.sync(); renderSettings(); toast("Saliste del grupo (los datos quedan en este dispositivo)"); break;
+    case "leave-group":
+      if (confirmTwice(el, "¿Salir? Tocá de nuevo")) { S.leaveGroup(); location.hash = "#/"; route(); toast("Saliste del grupo"); }
+      break;
+    case "groups": groupSheet(); break;
+    case "invite": invite(); break;
+    case "switch-group": S.switchGroup(el.dataset.code); closeSheet(); draft = null; location.hash = "#/"; route(); toast(`Grupo: ${S.groupName()}`); break;
+    case "new-group":
+      openSheet(`<h2>Nuevo grupo</h2><form class="stack" data-form="create-group" style="margin-top:12px">
+        <input type="text" name="name" placeholder="ej: Barra del jueves" maxlength="40" required>
+        <button class="btn felt block" type="submit">Crear grupo</button></form>`, (sh) => sh.querySelector("input").focus());
+      break;
+    case "join-group":
+      openSheet(`<h2>Unirme a un grupo</h2><form class="stack" data-form="join-group" style="margin-top:12px">
+        <input type="text" name="code" placeholder="Link o código" autocapitalize="off" required>
+        <button class="btn felt block" type="submit">Unirme</button></form>`, (sh) => sh.querySelector("input").focus());
+      break;
     case "export": {
       const blob = new Blob([S.exportJSON()], { type: "application/json" });
       const url = URL.createObjectURL(blob);
@@ -771,12 +846,14 @@ document.addEventListener("submit", (ev) => {
       break;
     }
     case "rename-player": S.renamePlayer(f.dataset.id, val); closeSheet(); rerender(); break;
-    case "group": {
-      const code = S.setGroup(val);
-      if (code.length < 4) { toast("Usá un código de 4 letras o más"); S.setGroup(""); return; }
-      S.sync().then(() => { renderSettings(); toast(`Conectado a “${code}”`); });
+    case "create-group": {
+      if (!S.createGroup(val)) return;
+      closeSheet(); draft = null; location.hash = "#/"; route();
+      toast("¡Grupo creado! Ahora invitá a la barra");
       break;
     }
+    case "join-group": doJoin(val); break;
+    case "rename-group": S.renameGroup(val); renderSettings(); toast("Nombre guardado"); break;
   }
 });
 document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeSheet(); });
@@ -784,22 +861,26 @@ document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeSheet
 /* ================= Arranque ================= */
 applyTheme(safeTheme());
 const params = new URLSearchParams(location.search);
-if (params.get("grupo")) {
-  S.setGroup(params.get("grupo"));
-  history.replaceState(null, "", location.pathname + (location.hash || "#/"));
-}
+const inviteCode = params.get("grupo");
+if (inviteCode) history.replaceState(null, "", location.pathname + (location.hash || "#/"));
 const $chip = document.getElementById("sync-chip");
-S.onSync(({ state, msg }) => {
-  $chip.hidden = state === "off";
-  $chip.textContent = state === "ok" ? `☁︎ ${S.getGroup()}` : msg;
-  $chip.className = `sync-chip ${state === "ok" ? "ok" : state === "err" ? "err" : ""}`;
-});
+$chip.addEventListener("click", groupSheet);
+const paintChip = (st = lastSync) => {
+  lastSync = st;
+  $chip.hidden = !S.getGroup();
+  const dot = st.state === "ok" ? "ok" : st.state === "err" ? "err" : st.state === "busy" ? "busy" : "";
+  $chip.innerHTML = `<i class="sdot ${dot}"></i><span>${h(S.groupName())}</span><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m6 9 6 6 6-6"/></svg>`;
+  $chip.title = st.state === "err" ? "Sin conexión: se guarda en el celular y se sube cuando vuelva internet" : st.msg;
+};
+let lastSync = { state: "off", msg: "" };
+S.onSync(paintChip);
 // Cuando llegan datos nuevos de la nube, redibujar sin perder lo que se está tipeando
 let pendingRender = false;
 document.addEventListener("focusout", () => setTimeout(() => {
   if (pendingRender && !$sheetRoot.innerHTML) { pendingRender = false; route({ scroll: false }); }
 }, 0));
 S.subscribe((_, { remote }) => {
+  paintChip();
   if (!remote) return;
   const active = document.activeElement;
   if ($sheetRoot.innerHTML || (active && /INPUT|TEXTAREA/.test(active.tagName) && active.value)) { pendingRender = true; return; }
@@ -807,7 +888,8 @@ S.subscribe((_, { remote }) => {
 });
 route();
 S.sync();
+if (inviteCode && inviteCode !== S.getGroup()) doJoin(inviteCode);
 document.addEventListener("visibilitychange", () => {
   if (document.visibilityState === "visible") { S.sync(); if (location.hash.startsWith("#/partida/")) manageWakeLock(true); }
 });
-setInterval(() => { if (document.visibilityState === "visible") S.sync(); }, 20000);
+setInterval(() => { if (document.visibilityState === "visible") S.sync(); }, 10000);
